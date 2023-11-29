@@ -1,0 +1,48 @@
+
+Phased Array Config - Wed Nov 29 14:09:31 2023
+
+====================================================================================
+
+----- UT Configuration -------------------------------------------------------------
+
+____________________________________________________________________________________________________
+--> Virtual Channel 0 (Default) - PA Probe: 128 Elements, 3.50 MHz, 0.34 mm (Pitch)
+    ------------------------------------------------------------------------------------------------
+
+    Gain:                  29.00 dB
+    TGC Curve:             DISABLED
+
+    Acq. Offset Time:      0.00 us
+    Acq. Start:            0.00 us, 0.00 mm
+    Acq. End               213.33 us, 160.00 mm
+    Material Velocity:     1500 m/s
+    Attenuator:            -20 dB
+    Acq. Mode:             RF
+    A-Scan PRF             5000 Hz
+    Sampling Frequency:    40.00 MHz
+    Reduction Factor:      0
+    Signal Processing:     NONE
+    HW FIR Filter:         1000.00 MHz - 5000.00 MHz
+    Pulser:                100 V, 50 ns, 1 pulses
+
+    HW Gate 0:             ENABLED (Maximum)
+          Start:             5.00 mm, 3.33 us
+          End:               15.00 mm, 10.00 us
+          Threshold:         20.00 %
+    HW Gate 1:             ENABLED (Maximum)
+          Start:             5.00 mm, 3.33 us
+          End:               15.00 mm, 10.00 us
+          Threshold:         20.00 %
+    HW Gate 2:             DISABLED
+    HW Gate 3:             DISABLED
+
+    Scan Type:             Angular Scan (FOCUSED)
+    Aperture:              48 elements (16.3 mm)
+    Start Angle:           -45.0 degrees
+    End Angle:             45.0 degrees
+    Angular Step:          1.0 degrees
+    Emission Focal Distance:     60.0 mm
+    Reception Focal Distance:    20.0 mm
+
+    A-Scan Number:         91
+    A-Scan samples Number: 8534

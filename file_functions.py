@@ -229,11 +229,11 @@ class BinFile:
             self.scan_data.append(np.array(buffer_short))
             del buffer_short
 
-            if self.version != '0000.0000.0000.0001':
-
-                # ---> Sw time-stamp
-                buffer_double = ReadBINFileField_DOUBLE(f,e)
-                self.sw_time_stamp.append(np.array(buffer_double))
+            # if self.version != '0000.0000.0000.0001':
+            #
+            #     # ---> Sw time-stamp
+            #     buffer_double = ReadBINFileField_DOUBLE(f,e)
+            #     self.sw_time_stamp.append(np.array(buffer_double))
 
         f.close()
         
@@ -395,7 +395,7 @@ class Dataset:
         yl = np.round(-self.z[-1,0]  / self.px2mm)
         yr = np.round(-self.z[-1, -1] / self.px2mm)
         cx = (xl + xr) / 2          # Coordenada x del centro del barrido
-        cy = -(yl * cx) / xl + yl   # Coordenada y del centro del barrido
+        cy = (-(yl * cx) / xl + yl) +0.001  # Coordenada y del centro del barrido
         self.xl = xl
         self.xr = xr
         self.yl = yl
@@ -405,7 +405,7 @@ class Dataset:
 
 
         # Calculo el rango inicial y final en píxeles, y los pasos radiales y angulares
-        ri = np.sqrt((cx - xl) ** 2 + cy ** 2)
+        ri = 0.001#np.sqrt((cx - xl) ** 2 + cy ** 2)
         rf = np.sqrt(cx ** 2 + (cy - yl) ** 2)
         dr = (self.r[1] - self.r[0]) / self.px2mm
         da = (self.angles[1] - self.angles[0])
