@@ -36,9 +36,11 @@ class VideoPlayer(QtGui.QWidget):
         self.video_view.setAspectLocked(True)
         # Item para mostrar image data
         self.img_video = pg.ImageItem()
+        self.img_video.setLevels((0, 255))
 
         self.video_view.addItem(self.img_video)
         self.video_view.invertY()
+
 
 
 
@@ -49,9 +51,11 @@ class VideoPlayer(QtGui.QWidget):
         self.filtered_image_view.setAspectLocked(True)
         # Item para mostrar image data
         self.img_filtered = pg.ImageItem()
-        #self.img_filtered.setLevels((0, 255))
+        self.img_filtered.setLevels((0, 255))
 
         self.filtered_image_view.addItem(self.img_filtered)
+
+
 
         win = self.geometry()
         # Scroll Bar
@@ -70,6 +74,9 @@ class VideoPlayer(QtGui.QWidget):
 
         # Create button to open the configuration dialog
         self.config_button = QtGui.QPushButton("Configurar Filtros")
+        #Create button to config spatial compounded
+        self.spatial_config_button = QtGui.QPushButton("Configurar filt. espaciales")
+
         #Etiqueta para mostrar por pantalla las subbandas usadas
         self.subbands_label = QtGui.QLabel('Subbandas de frecuencia usadas: ')
 
@@ -83,6 +90,8 @@ class VideoPlayer(QtGui.QWidget):
         # Crear un botón para abrir la ventana de adquisiciones múltiples
         self.open_multi_acq_button = QtGui.QPushButton('Abrir Adquisiciones Múltiples')
         self.open_multi_acq_button.setEnabled(False)
+
+
         #crear boton de guardado de bscan procesado y de comparar bscan
         self.save_button = QtGui.QPushButton('Guardar')
         self.save_button.setEnabled(False)
@@ -172,8 +181,10 @@ class VideoPlayer(QtGui.QWidget):
         layout.addWidget(self.labels_result_widget,5,0,1,7)
         layout.addWidget(self.mode_combo,0, 4, 1, 1)
         layout.addWidget(self.config_button, 0, 5, 1, 1)
-
+        layout.addWidget(self.spatial_config_button, 2, 4, 1, 1)
         layout.addWidget(self.open_multi_acq_button, 0, 1, 1, 1)
+
+
         layout.addWidget(self.save_button, 0, 2, 1, 1)
         layout.addWidget(self.compare_button, 0, 6, 1, 1)
 
@@ -194,7 +205,9 @@ class VideoPlayer(QtGui.QWidget):
         # Connect buttons to functions
         self.video_button.clicked.connect(self.open_video_file)
         self.config_button.clicked.connect(self.open_config_dialog)
+        self.spatial_config_button.clicked.connect(self.open_spatial_config_dialog)
         self.open_multi_acq_button.clicked.connect(self.open_multi_acq_dialog)
+
         self.compare_button.clicked.connect(self.compare_function)
         self.save_button.clicked.connect(self.save_function)
 
@@ -207,6 +220,8 @@ class VideoPlayer(QtGui.QWidget):
 
         # Create an instance of FrequencyCompoundingUI
         self.config_dialog = FrequencyCompoundingUI()
+        # Create an instance of SpatialCompoundingUI
+        self.spatial_config_dialog = SpatialCompoundingUI()
 
 
 
@@ -231,6 +246,13 @@ class VideoPlayer(QtGui.QWidget):
         self.central_frequency = 3.5e6
         self.total_bandwidth = 3e6
         self.overlap_frequency = 0
+
+        #valores spatialcompounding por defecto
+        self.n_steps=5
+        self.n_elements=64
+        self.aperture=48
+
+
 
 
 
@@ -260,20 +282,33 @@ class VideoPlayer(QtGui.QWidget):
 
 
 
-        self.video_file, _ = QtGui.QFileDialog.getOpenFileName(self, 'Open Video', '', 'Video Files (*.BIN)')
-        if self.video_file:
+        self.video_file, _ = QtGui.QFileDialog.getOpenFileName(self, 'Open Video', '', 'Video Files (*.BIN) ;; PNG files (*.png)')
+        self.extension=self.video_file.split('.')[-1]
+        if self.video_file and (self.extension=='BIN' or self.extension == 'bin'):
             # Leo el archivo y genero un objeto 'BinFile' que contiene los datos crudos tal cual se leen del archivo
-            self.bfile = BinFile(self.video_file)
+            bfile = BinFile(self.video_file)
             # A partir del objeto 'BinFile' genero un objeto 'Dataset' que ya tiene los datos en formato 'cubo de datos'
             # y contiene las matrices de coordenadas de los píxeles para poder pintar
-            self.dset = Dataset(self.bfile, resample=0, med_kernel=0, avg_kernel=0)
+            self.dset = Dataset(bfile, resample=0, med_kernel=0, avg_kernel=0)
 
-            for i in range(self.dset.nimg):
 
-                envolvente = signal.hilbert(self.dset.bscan[:,:,i], axis=0)
-                envolvente = 20 * np.log10(np.abs(envolvente) / 3276.7)  # TAMAÑO INT16 pasamos a dB
-                envolvente[envolvente< -self.dset.dB_range] = -self.dset.dB_range
-                self.dset.bscan[:, :, i]=envolvente
+            #for i in range(self.dset.nimg):
+
+            envolvente = signal.hilbert(self.dset.bscan[:,:,0], axis=0)
+            # coeff = [-0.0018790103, -0.0003538003, -0.0018397546, -0.0006974823, -0.0027199950, -0.0012019279,
+            #          -0.0038480745, -0.0019126439, -0.0052654910, -0.0028847239, -0.0070205066, -0.0041862177,
+            #          -0.0091777238, -0.0059058206, -0.0118248552, -0.0081646622, -0.0150887042, -0.0111409845,
+            #          -0.0191715703, -0.0151178496, -0.0244217110, -0.0205841472, -0.0314885954, -0.0284813086,
+            #          -0.0417299535, -0.0409085813, -0.0585098994, -0.0637067963, -0.0929410511, -0.1214409414,
+            #          -0.2155478257, -0.6319739537, 0.6319739537, 0.2155478257, 0.1214409414, 0.0929410511, 0.0637067963,
+            #          0.0585098994, 0.0409085813, 0.0417299535, 0.0284813086, 0.0314885954, 0.0205841472, 0.0244217110,
+            #          0.0151178496, 0.0191715703, 0.0111409845, 0.0150887042, 0.0081646622, 0.0118248552, 0.0059058206,
+            #          0.0091777238, 0.0041862177, 0.0070205066, 0.0028847239, 0.0052654910, 0.0019126439, 0.0038480745,
+            #          0.0012019279, 0.0027199950, 0.0006974823, 0.0018397546, 0.0003538003, 0.0018790103]
+            # envolvente = self.hilbert_transform(self.dset.bscan[:,:,0], coeff)
+            envolvente = 20 * np.log10(np.abs(envolvente) / 3276.7)  # TAMAÑO INT16 pasamos a dB
+            envolvente[envolvente< -self.dset.dB_range] = -self.dset.dB_range
+            self.dset.bscan[:, :, 0]=envolvente
 
 
             self.dset.ScanConvert(raw=False) #como bscan y raw son iguales trabajo con uno para filtrar y el otro pinto para comparar
@@ -290,6 +325,19 @@ class VideoPlayer(QtGui.QWidget):
             self.first = True  # bandera para poder cargar imagen to track la primera vez
             self.video_openned = True
             #self.scroll.show()
+            del bfile
+        elif self.video_file and (self.extension == 'png' or self.extension == 'PNG'):
+            file_path = self.video_file
+            # Cargar la imagen en color
+            imagen_color = cv2.imread(file_path)
+
+            # Convertir la imagen a escala de grises
+            imagen_gris = cv2.cvtColor(imagen_color, cv2.COLOR_BGR2GRAY)
+            pixmap = QtGui.QPixmap(file_path)
+            self.image = np.array(imagen_gris)#np.array(pixmap.toImage())
+            self.img_video.setImage(self.image)
+
+
 
     def open_config_dialog(self):
 
@@ -312,7 +360,31 @@ class VideoPlayer(QtGui.QWidget):
             #self.raw_image.setImage(self.get_raw_image_data())  # Replace this with your raw image data
             # self.img_filtered.setImage(compounded_image_data)
             if self.video_file != '':
+                self.update_images(only_filtered=False)# TODO: only_fltered es la bandera que habilita o no mostral la imagen sin filtro
+
+    def open_spatial_config_dialog(self):
+
+        # Load the configuration values before showing the dialog
+        self.spatial_config_dialog.n_step_spinBox.setValue(self.n_steps)
+        self.spatial_config_dialog.aperture_spinBox.setValue(self.aperture)
+        self.spatial_config_dialog.n_elements_spinBox.setValue(self.n_elements)
+
+
+        if self.spatial_config_dialog.exec_() == QtWidgets.QDialog.Accepted:
+            # Apply the settings from the dialog
+            self.n_steps = int(self.spatial_config_dialog.n_step_spinBox.value())
+            self.aperture = self.spatial_config_dialog.aperture_spinBox.value()
+            self.n_elements = self.spatial_config_dialog.n_elements_spinBox.value()
+            self.last_el=self.spatial_config_dialog.last_spinBox.value()
+            self.first_el = self.spatial_config_dialog.first_spinBox.value()
+            self.deltaMax =(self.spatial_config_dialog.last_spinBox.value() - self.spatial_config_dialog.fist_spinBox.value())* self.spatial_config_dialog.pitch.value() #valor en mm
+            #self.c_
+
+
+
+            if self.video_file != '':
                 self.update_images(only_filtered=True)
+
 
     def on_mode_selection_changed(self):
         # Habilitar o deshabilitar el botón de adquisiciones múltiples según la selección
@@ -342,10 +414,17 @@ class VideoPlayer(QtGui.QWidget):
         if state == 2:
             if sender == self.checkbox1:
                 self.checkbox2.setChecked(False)
-                self.update_images()
+                if self.mode_combo.currentIndex() == 1:
+                    self.open_multi_acq_button.setEnabled(False)
+                else:
+                    self.open_multi_acq_button.setEnabled(True)
+                #self.update_images()
             else:
                 self.checkbox1.setChecked(False)
-                self.update_images()
+                self.open_multi_acq_button.setEnabled(True)
+                self.config_button.setEnabled(False)
+                self.mode_combo.setEnabled(False)
+                #self.update_images()
 
     def update_images(self, only_filtered=False):
 
@@ -356,12 +435,12 @@ class VideoPlayer(QtGui.QWidget):
                 self.image = self.dset.frames[:, :, self.frame_pos]
 
                 self.img_video.setImage(self.image)
-            if not self.video_frame == None:
+            if not self.video_file == '':
                 #Frequency compounded
                 self.compound_image()
                 self.dset.ScanConvert(filtered_frame=self.bscan_filtered[:, :, self.frame_pos])
                 self.image_filtered = self.dset.filt_frame
-                self.img_filtered.setImage(self.image_filtered, autoLevels=True)
+                self.img_filtered.setImage(self.image_filtered, autoLevels=False)
 
         elif self.checkbox2.isChecked():
 
@@ -369,12 +448,12 @@ class VideoPlayer(QtGui.QWidget):
                 self.image = self.dset.frames[:, :, self.frame_pos]
 
                 self.img_video.setImage(self.image)
-            if not self.video_frame == None:
-                # spatial compounded
+            if not self.video_file == '':
+                # TODO spatial compounded
                 self.compound_image()
                 self.dset.ScanConvert(filtered_frame=self.bscan_filtered[:, :, self.frame_pos])
                 self.image_filtered = self.dset.filt_frame
-                self.img_filtered.setImage(self.image_filtered, autoLevels=True)
+                self.img_filtered.setImage(self.image_filtered, autoLevels=False)
 
 
 
@@ -408,8 +487,9 @@ class VideoPlayer(QtGui.QWidget):
 
 
         elif self.checkbox2.isChecked():#spatial compounded
-            print('AQUI VA FILTRO')
-            #N_subbands correspondera al numero de aperturas, aqui se deberia de hacer llamada al metodo spatial compounding
+            print('AQUI VA spatial compounded')
+            #aqui se deberia de hacer llamada al metodo spatial compounding
+            #processed_image = self.spatial_compounded_imaging(processed_image)
 
 
         # elif self.checkbox3.isChecked(): #FIR
@@ -430,6 +510,10 @@ class VideoPlayer(QtGui.QWidget):
             # change the processed image
             self.bscan_filtered[:,:,self.frame_pos]=processed_image
 
+    def hilbert_transform(self, image, hilbert_coeffs):
+        # Aplica los coeficientes precalculados a la señal mediante convolución
+        hilbert_signal =  np.apply_along_axis(lambda x: np.convolve(x, hilbert_coeffs, mode='same'), 0, image)
+        return hilbert_signal
     #@jit(nopython=True, parallel=False, cache=True)
     def frequency_compounded_imaging(self, b_scan, fs):
         num_subbands = self.n_subbands
@@ -444,38 +528,54 @@ class VideoPlayer(QtGui.QWidget):
         for start, end in self.subbands:
             # Diseñar el filtro paso banda
 
-            b = signal.firwin(256, [start, end], pass_zero='bandpass', fs=fs, scale=True)
+            b = signal.firwin(128, [start, end], pass_zero='bandpass', fs=fs, scale=True)
             a = 1
             # Filtrar la matriz cruda B-scan con el filtro paso banda
             filtered_b_scan = signal.filtfilt(b, a, b_scan, axis=0)
+            # envolvente= np.abs(filtered_b_scan)
             envolvente = signal.hilbert(filtered_b_scan, axis=0)
+            #coeff=[-0.0018790103,-0.0003538003,-0.0018397546,-0.0006974823,-0.0027199950,-0.0012019279,-0.0038480745,-0.0019126439,-0.0052654910,-0.0028847239,-0.0070205066,-0.0041862177,-0.0091777238,-0.0059058206,-0.0118248552,-0.0081646622,-0.0150887042,-0.0111409845,-0.0191715703,-0.0151178496,-0.0244217110,-0.0205841472,-0.0314885954,-0.0284813086,-0.0417299535,-0.0409085813,-0.0585098994,-0.0637067963,-0.0929410511,-0.1214409414,-0.2155478257,-0.6319739537 ,0.6319739537 ,0.2155478257 ,0.1214409414 ,0.0929410511 ,0.0637067963 ,0.0585098994 ,0.0409085813 ,0.0417299535 ,0.0284813086 ,0.0314885954 ,0.0205841472 ,0.0244217110 ,0.0151178496 ,0.0191715703 ,0.0111409845 ,0.0150887042 ,0.0081646622 ,0.0118248552 ,0.0059058206 ,0.0091777238 ,0.0041862177 ,0.0070205066 ,0.0028847239 ,0.0052654910 ,0.0019126439 ,0.0038480745 ,0.0012019279 ,0.0027199950 ,0.0006974823 ,0.0018397546 ,0.0003538003 ,0.0018790103]
+            #envolvente = self.hilbert_transform(filtered_b_scan, coeff)
             envolvente = 20 * np.log10(np.abs(envolvente)/3276.7)  # TAMAÑO INT16 pasamos a dB
             envolvente[envolvente < -self.dset.dB_range] = -self.dset.dB_range
 
             # Acumular la sub-banda filtrada en la imagen compuesta
             compounded_image += envolvente
-
+            #-----------
+            # intermedia= 20 * np.log10(envolvente/3276.7)  # TAMAÑO INT16 pasamos a dB
+            # intermedia[intermedia < -self.dset.dB_range] = -self.dset.dB_range
+            #---------------
             self.filt_sub_bscans[:,:,i]=envolvente
             i += 1
         # Normalizar la imagen compuesta
         compounded_image /= num_subbands
+
+        #aplico filtro paso bajo equivalente a t.hilbert
+        # b,a=signal.butter(6, 5*10**6, fs=fs, btype='low', analog=False)
+        # compounded_image= signal.lfilter(b, a, compounded_image)
+        # compounded_image = 20 * np.log10(np.abs(compounded_image) / 3276.7)  # TAMAÑO INT16 pasamos a dB
+        # compounded_image[compounded_image < -self.dset.dB_range] = -self.dset.dB_range
 
         # # compounded_image=(compounded_image)/np.min(compounded_image)*(self.dset.dB_range) -self.dset.dB_range#convierto a valores de -48 a 0
 
         return compounded_image
 
 
-
+    def open_spatial_compounded_imaging(self):
+        self.spatial_dialog=SpatialWindow(self)
+        self.spatial_dialog.exec_()
 
     def calculate_std(self):
         # habilito funcion de guardado y de comparar
         self.save_button.setEnabled(True)
         self.compare_button.setEnabled(True)
         multiple_shot = self.mode_combo.currentIndex()
-        if multiple_shot == 0and not self.comparing:
-            self.bscan_data_filt = self.bscan_filtered[:, :, self.frame_pos]
-
-            self.bscan_data = self.dset.bscan[:, :, self.frame_pos]
+        if multiple_shot == 0and not self.comparing and not self.checkbox2.isChecked():
+            # self.bscan_data_filt = self.bscan_filtered[:,:,self.frame_pos]
+            #
+            # self.bscan_data = self.dset.bscan[:,:,self.frame_pos]
+            self.bscan_data_filt = self.simple_win.compounded_bscan
+            self.bscan_data = self.image
 
             # Create the ROI dialog and show it
             self.std_roi_dialog = STD_ROIDialog(multiple_shot, self.bscan_data, self.bscan_data_filt, self)
@@ -489,11 +589,13 @@ class VideoPlayer(QtGui.QWidget):
             #
             # self.std_label.setText("STD: {:.2f}".format(std_value))
             # self.std_label_filt.setText("STD: {:.2f}".format(std_value_filt))
-        elif multiple_shot == 0 and self.comparing:
+        elif multiple_shot == 0 and self.comparing and not self.checkbox2.isChecked():
             # Create the ROI dialog and show it
-            self.bscan_data_filt = self.bscan_filtered[:, :, self.frame_pos]
+            # self.bscan_data_filt = self.bscan_filtered[:, :, self.frame_pos]
 
-            self.bscan_data = self.dset.bscan[:, :, self.frame_pos]
+            # self.bscan_data = elf.dset.bscan[:,:,self.frame_pos]
+            self.bscan_data_filt = self.simple_win.compounded_bscan
+            self.bscan_data = self.image
             self.std_roi_dialog = STD_ROIDialog(multiple_shot, self.bscan_data, self.bscan_data_filt, self)
             self.std_roi_dialog.exec_()
             self.std_roi = self.std_roi_dialog.std_roi
@@ -505,7 +607,7 @@ class VideoPlayer(QtGui.QWidget):
             #
             # self.std_label.setText("STD: {:.2f}".format(std_value))
             # self.std_label_filt.setText("STD: {:.2f}".format(std_value_filt))
-        elif multiple_shot == 1 and self.comparing:
+        elif multiple_shot == 1 and self.comparing and not self.checkbox2.isChecked():
             self.bscan_data_filt = self.multi_dialog.compounded_bscan
 
             # Create the ROI dialog and show it
@@ -522,7 +624,11 @@ class VideoPlayer(QtGui.QWidget):
             # self.std_label_filt.setText("STD: {:.2f}".format(std_value_filt))
 
         else:
-            self.bscan_data_filt = self.multi_dialog.compounded_bscan
+            if self.checkbox1.isChecked():
+                self.bscan_data_filt = self.multi_dialog.compounded_bscan
+            elif self.checkbox2.isChecked():
+                self.bscan_data_filt = self.spatial_dialog.compounded_image
+            self.bscan_data=None
             # Create the ROI dialog and show it
             self.std_roi_dialog = STD_ROIDialog(multiple_shot, self.bscan_data, self.bscan_data_filt, self)
             self.std_roi_dialog.exec_()
@@ -540,28 +646,33 @@ class VideoPlayer(QtGui.QWidget):
         self.compare_button.setEnabled(True)
         multiple_shot=self.mode_combo.currentIndex()
 
-        if not multiple_shot and not self.comparing:
-            self.bscan_data_filt = self.bscan_filtered[:,:,self.frame_pos]
-
-            self.bscan_data = self.dset.bscan[:,:,self.frame_pos]
+        if not multiple_shot and not self.comparing and not self.checkbox2.isChecked():
+            #self.bscan_data_filt = self.bscan_filtered[:,:,self.frame_pos]
+            #
+            # self.bscan_data = self.dset.bscan[:,:,self.frame_pos]
+            if not (self.extension == 'png' or self.extension == 'PNG'):
+                self.bscan_data_filt=self.simple_win.compounded_bscan
+            self.bscan_data = self.image
 
             # Create the ROI dialog and show it
             self.roi_dialog = CNR_ROIDialog(multiple_shot,self.bscan_data,self.bscan_data_filt, self)
             self.roi_dialog.exec_()
             self.background_roi = self.roi_dialog.background_roi
             self.contrast_roi = self.roi_dialog.interest_roi
-        elif not multiple_shot and self.comparing:
+        elif not multiple_shot and self.comparing and not self.checkbox2.isChecked():
 
-            self.bscan_data_filt = self.bscan_filtered[:, :, self.frame_pos]
+            #self.bscan_data_filt = self.bscan_filtered[:, :, self.frame_pos]
 
-            self.bscan_data = self.bscan_data
+            #self.bscan_data = self.bscan_data
+            self.bscan_data_filt = self.simple_win.compounded_bscan
+            self.bscan_data = self.image
 
             # Create the ROI dialog and show it
             self.roi_dialog = CNR_ROIDialog(multiple_shot, self.bscan_data, self.bscan_data_filt, self)
             self.roi_dialog.exec_()
             self.background_roi = self.roi_dialog.background_roi
             self.contrast_roi = self.roi_dialog.interest_roi
-        elif multiple_shot and self.comparing:
+        elif multiple_shot and self.comparing and not self.checkbox2.isChecked():
 
             self.bscan_data_filt = self.multi_dialog.compounded_bscan
 
@@ -571,8 +682,12 @@ class VideoPlayer(QtGui.QWidget):
             self.background_roi = self.roi_dialog.background_roi
             self.contrast_roi = self.roi_dialog.interest_roi
         else:
+            if self.checkbox1.isChecked():
+                self.bscan_data_filt=self.multi_dialog.compounded_bscan
+            elif self.checkbox2.isChecked():
+                self.bscan_data_filt = self.spatial_dialog.compounded_image
 
-            self.bscan_data_filt=self.multi_dialog.compounded_bscan
+            self.bscan_data=None
             # Create the ROI dialog and show it
             self.roi_dialog = CNR_ROIDialog(multiple_shot, self.bscan_data, self.bscan_data_filt, self)
             self.roi_dialog.exec_()
@@ -580,9 +695,15 @@ class VideoPlayer(QtGui.QWidget):
             self.contrast_roi = self.roi_dialog.interest_roi
 
     def open_multi_acq_dialog(self):
-        # Create the ROI dialog and show it
-        self.multi_dialog = MultiAcquisitionWindow(self)
-        self.multi_dialog.exec_()
+
+        if self.checkbox1.isChecked():
+            # Create the ROI dialog and show it
+            self.multi_dialog = MultiAcquisitionWindow(self)
+            self.multi_dialog.exec_()
+        elif self.checkbox2.isChecked():
+
+            self.spatial_dialog = SpatialWindow(self)
+            self.spatial_dialog.exec_()
 
     def save_function(self):
         path_save='.\\Results\\'
@@ -733,6 +854,72 @@ class FrequencyCompoundingUI(QtWidgets.QDialog):
     def reject(self):
         super().reject()
 
+class SpatialCompoundingUI(QtWidgets.QDialog):
+
+    def __init__(self):
+        super().__init__()
+
+
+
+        # Create form layout for settings
+        form_layout = QtWidgets.QFormLayout(self)
+
+        # SpinBoxes for configuring settings
+        self.n_elements_spinBox = QtGui.QDoubleSpinBox()
+        self.n_elements_spinBox.setMinimum(1)
+        self.n_elements_spinBox.setMaximum(124)
+        self.n_elements_spinBox.setValue(64)
+        self.n_elements_spinBox.setSingleStep(1)
+        form_layout.addRow(QtGui.QLabel("Elementos:"), self.n_elements_spinBox)
+
+        self.aperture_spinBox = QtGui.QDoubleSpinBox()
+        self.aperture_spinBox.setMinimum(1)
+        self.aperture_spinBox.setMaximum(64)
+        self.aperture_spinBox.setValue(48)
+        self.aperture_spinBox.setSingleStep(1)
+        form_layout.addRow(QtGui.QLabel("Apertura subimagen:"), self.aperture_spinBox)
+
+        self.n_step_spinBox = QtGui.QDoubleSpinBox()
+        self.n_step_spinBox.setMinimum(1)
+        self.n_step_spinBox.setMaximum(20)
+        self.n_step_spinBox.setValue(5)
+        self.n_step_spinBox.setSingleStep(1)
+        form_layout.addRow(QtGui.QLabel("Numero de subimagenes:"), self.n_step_spinBox)
+        self.first_spinbox = QtGui.QDoubleSpinBox()
+        self.first_spinbox.setMinimum(1)
+        self.first_spinbox.setMaximum(16)
+        self.first_spinbox.setValue(1)
+        self.first_spinbox.setSingleStep(1)
+        form_layout.addRow(QtGui.QLabel("Primer elemento:"), self.first_spinbox)
+        self.last_spinbox = QtGui.QDoubleSpinBox()
+        self.last_spinbox.setMinimum(1)
+        self.last_spinbox.setMaximum(16)
+        self.last_spinbox.setValue(16)
+        self.last_spinbox.setSingleStep(1)
+        form_layout.addRow(QtGui.QLabel("Ultimo elemento:"), self.last_spinbox)
+        self.pitch = QtGui.QDoubleSpinBox()
+        self.pitch.setDecimals(3)
+        self.pitch.setMinimum(0.20)
+        self.pitch.setMaximum(0.90)
+        self.pitch.setValue(0.34)
+        self.pitch.setSingleStep(0.01)
+        form_layout.addRow(QtGui.QLabel("Pitch (mm):"), self.pitch)
+
+        # Button box for OK and Cancel buttons
+        button_box = QtGui.QDialogButtonBox(QtGui.QDialogButtonBox.Ok | QtGui.QDialogButtonBox.Cancel)
+        button_box.accepted.connect(self.accept)
+        button_box.rejected.connect(self.reject)
+        form_layout.addRow(button_box)
+
+    def accept(self):
+
+
+
+        super().accept()
+
+    def reject(self):
+        super().reject()
+
 class CNR_ROIDialog(QtWidgets.QDialog):
     def __init__(self,multiple_shot, image_data=None, image_data_filt=None, parent=None):
         super().__init__(parent)
@@ -740,7 +927,7 @@ class CNR_ROIDialog(QtWidgets.QDialog):
         self.image_data = image_data
         self.image_data_filt=image_data_filt
         self.parent=parent
-
+        self.multiple_shot=multiple_shot
         layout = QtWidgets.QVBoxLayout()
         self.video_view = pg.PlotWidget()
         self.video_view.hideAxis('bottom')
@@ -754,7 +941,7 @@ class CNR_ROIDialog(QtWidgets.QDialog):
         self.video_view.addItem(self.image_view)
         self.video_view.invertY()
         #self.image_view.setAspectLocked(False)
-        if multiple_shot:
+        if multiple_shot or  self.parent.checkbox2.isChecked():
             self.image_view.setImage(self.image_data_filt)
         else:
             self.image_view.setImage(self.image_data)
@@ -788,7 +975,7 @@ class CNR_ROIDialog(QtWidgets.QDialog):
     def add_background_roi(self):
         # Implement the logic to add ROI to the background
         # For demonstration purposes, let's create a rectangle at the top-left corner
-        self.background_roi = pg.ROI(pg.Point(32.165493, 5262.965405),pg.Point(6.582061, 814.354380), pen='r')
+        self.background_roi = pg.ROI(pg.Point(58.794870, 3704.024460), pg.Point(4.427082, 541.539715), pen='r')#pg.ROI(pg.Point(32.165493, 5262.965405),pg.Point(6.582061, 814.354380), pen='r'){'pos': Point(58.794870, 3704.024460), 'size': Point(4.427082, 541.539715), 'angle': 0.0}
         self.background_roi.addScaleHandle([1, 0], [0, 1])  # Add a scale handle to allow resizing horizontally
         # self.background_roi.state={'pos': pg.Point(32.165493, 5262.965405), 'size': pg.Point(6.582061, 814.354380), 'angle': 0.0}
         # self.background_roi.lastState = {'pos': pg.Point(32.165493, 5262.965405), 'size': pg.Point(6.582061, 814.354380),'angle': 0.0}
@@ -800,7 +987,7 @@ class CNR_ROIDialog(QtWidgets.QDialog):
     def add_interest_roi(self):
         # Implement the logic to add ROI to the zone of interest
         # For demonstration purposes, let's create a rectangle at the bottom-right corner
-        self.interest_roi = pg.ROI(pg.Point(39.400064, 1872.268849), pg.Point(23.514035, 1048.195522), pen='g')
+        self.interest_roi = pg.ROI(pg.Point(38.938283, 2106.109990), pg.Point(17.818735, 950.761713), pen='g')#pg.ROI(pg.Point(39.400064, 1872.268849), pg.Point(23.514035, 1048.195522), pen='g'){'pos': Point(38.938283, 2106.109990), 'size': Point(17.818735, 950.761713), 'angle': 0.0}
         self.interest_roi.addScaleHandle([1, 0], [0, 1])  # Add a scale handle to allow resizing horizontally
         # self.interest_roi.state={'pos': pg.Point(39.400064, 1872.268849), 'size': pg.Point(23.514035, 1048.195522), 'angle': 0.0}
         # self.interest_roi.lastState = {'pos': pg.Point(39.400064, 1872.268849), 'size': pg.Point(23.514035, 1048.195522),'angle': 0.0}
@@ -811,10 +998,10 @@ class CNR_ROIDialog(QtWidgets.QDialog):
 
     def calculate(self):
 
-        if self.image_view.image is not None or self.img_filtered.image is not None:#self.parent.mode_combo.currentIndex()==0 or self.parent.comparing:
+        if self.image_data is not None and self.image_data_filt is not None:#self.parent.mode_combo.currentIndex()==0 or self.parent.comparing:
 
             # Implement the logic to calculate the contrast to noise ratio
-            if self.interest_roi is not None and self.background_roi is not None:
+            if self.interest_roi is not None and self.background_roi is not None:#{'pos': Point(58.487016, 5204.505120), 'size': Point(6.582061, 814.354380), 'angle': 0.0}
                 # Get the pixel values inside the ROIs
                 interest_roi_pixels = self.interest_roi.getArrayRegion(self.image_data, self.image_view)
                 background_roi_pixels = self.background_roi.getArrayRegion(self.image_data, self.image_view)
@@ -870,7 +1057,7 @@ class STD_ROIDialog(QtWidgets.QDialog):
         self.video_view.addItem(self.image_view)
         self.video_view.invertY()
         #self.image_view.setAspectLocked(False)
-        if multiple_shot:
+        if multiple_shot or  self.parent.checkbox2.isChecked():
             self.image_view.setImage(self.image_data_filt)
         else:
             self.image_view.setImage(self.image_data)
@@ -900,7 +1087,7 @@ class STD_ROIDialog(QtWidgets.QDialog):
     def add_std_roi(self):
         # Implement the logic to add ROI to the zone of interest
         # For demonstration purposes, let's create a rectangle at the bottom-right corner
-        self.std_roi = pg.ROI(pg.Point(39.400064, 1872.268849), pg.Point(23.514035, 1048.195522), pen='g')
+        self.std_roi = pg.ROI(pg.Point(38.938283, 2106.109990), pg.Point(17.818735, 950.761713), pen='g')#pg.ROI(pg.Point(39.400064, 1872.268849), pg.Point(23.514035, 1048.195522), pen='g')
         self.std_roi.addScaleHandle([1, 0], [0, 1])  # Add a scale handle to allow resizing horizontally
         # self.std_roi.state={'pos': pg.Point(39.400064, 1872.268849), 'size': pg.Point(23.514035, 1048.195522), 'angle': 0.0}
         # self.interest_roi.addScaleHandle([0, 1], [1, 0])  # Add a scale handle to allow resizing vertically
@@ -910,7 +1097,7 @@ class STD_ROIDialog(QtWidgets.QDialog):
 
     def calculate(self):
 
-        if self.image_view.image is not None or self.img_filtered.image is not None:#self.parent.mode_combo.currentIndex()==0 or self.parent.comparing:
+        if self.image_data is not None and self.image_data_filt is not None:#self.parent.mode_combo.currentIndex()==0 or self.parent.comparing:
 
             # Implement the logic to calculate the contrast to noise ratio
             if self.std_roi is not None:
@@ -996,12 +1183,17 @@ class SimpleAcquisitionWindow(QtWidgets.QDialog):
         self.total_bandwidth = 3e6
         self.overlap_frequency = 0
 
+        # Conecta la señal rejected (evento de cierre) al método close_and_delete
+        #self.rejected.connect(self.close_and_delete)
+
 
 
         self.setModal(False)  # permite poder usar la main window, hay que ponerlo antes de mostrar
         self.add_acquisition()
         self.show()
-
+    def close_and_delete(self):
+        # Realiza cualquier limpieza necesaria antes de cerrar
+        self.deleteLater()
     def add_acquisition(self):
 
         #self.acquisitions= self.parent.filt_sub_bscans
@@ -1067,11 +1259,12 @@ class SimpleAcquisitionWindow(QtWidgets.QDialog):
 
         compounded_image /= n_acq
 
-        self.compounded_bscan=compounded_image
+        # self.compounded_bscan=compounded_image
         self.filt_frame = np.ones((infoConvert[1], infoConvert[2]), dtype='h') * (-infoConvert[0].astype('h'))  # frame compuesto
         ScanConvert_BilinealFrame(infoConvert[1], infoConvert[2], infoConvert[3], self.filt_frame , compounded_image, infoConvert[4], infoConvert[5])
+        self.compounded_bscan = self.filt_frame
+        self.parent.bscan_filtered[:, :, 0]=compounded_image
 
-        self.parent.bscan_filtered[:, :, 0]=self.compounded_bscan
 
         self.parent.img_filtered.setImage(self.filt_frame)
 
@@ -1096,6 +1289,10 @@ class MultiAcquisitionWindow(QtWidgets.QDialog):
         # Etiqueta para mostrar por pantalla las subbandas usadas
         self.subbands_label = QtGui.QLabel('Subbandas de frecuencia usadas: ')
         self.config_button.clicked.connect(self.open_config_dialog)
+        # Conecta la señal rejected (evento de cierre) al método close_and_delete
+        #self.rejected.connect(self.close_and_delete)
+
+
 
         # Create a vertical layout for main window
         main_layout = QtGui.QVBoxLayout()
@@ -1144,7 +1341,9 @@ class MultiAcquisitionWindow(QtWidgets.QDialog):
 
 
 
-
+    def close_and_delete(self):
+        # Realiza cualquier limpieza necesaria antes de cerrar
+        self.deleteLater()
     def add_acquisition(self):
 
 
@@ -1160,21 +1359,22 @@ class MultiAcquisitionWindow(QtWidgets.QDialog):
             fs = 40e6  # Frecuencia de muestreo en Hz
 
             [start, end] = self.subbands[self.n_acquisitions]
-            b = signal.firwin(256, [start, end], pass_zero='bandpass', fs=fs, scale=True)
+            b = signal.firwin(128, [start, end], pass_zero='bandpass', fs=fs, scale=True)
             a = 1
             # Filtrar la matriz cruda B-scan con el filtro paso banda
             filtered_b_scan = signal.filtfilt(b, a, self.dset.bscan[:, :, 0], axis=0)
             envolvente = signal.hilbert(filtered_b_scan, axis=0)
             envolvente = 20 * np.log10(np.abs(envolvente) / 3276.7)  # TAMAÑO INT16 pasamos a dB
             envolvente[envolvente < -self.dset.dB_range] = -self.dset.dB_range
-            self.dset.bscan[:, :, 0] = envolvente
+            #simulo que solo tiene una imagen el resto no me interesa
+            self.dset.bscan[:,:,0] = envolvente
 
             self.dset.ScanConvert(raw=False)  # como bscan y raw son iguales trabajo con uno para filtrar y el otro pinto para comparar
             #información necesario para aplicar scanConvert
             infoConvert=[self.dset.dB_range,self.dset.frame_ny, self.dset.frame_nx, self.dset.frames_val, self.dset.ix_test, self.dset.w_test]
 
             #creo widget nuevo
-            acq_filt_widget = acq_Widget(infoConvert, self.dset.bscan[:, :, 0], self.dset.frames[:,:,0], self.n_acquisitions, self)
+            acq_filt_widget = acq_Widget(infoConvert, self.dset.bscan[:,:,0], self.dset.frames[:,:,0], self.n_acquisitions, self)
 
 
 
@@ -1207,7 +1407,7 @@ class MultiAcquisitionWindow(QtWidgets.QDialog):
             if self.n_acquisitions >= len(self.subbands):
                 self.add_acquisition_button.setEnabled(False)
                 self.calculate_result_button.setEnabled(True)
-
+            del bfile
 
     def calculate_result(self):
 
@@ -1226,10 +1426,11 @@ class MultiAcquisitionWindow(QtWidgets.QDialog):
 
         compounded_image /= self.n_acquisitions
 
-        self.compounded_bscan=compounded_image
+        # self.compounded_bscan=compounded_image
         self.filt_frame = np.ones((self.dset.frame_ny, self.dset.frame_nx), dtype='h') * (-self.dset.dB_range.astype('h')) #frame compuesto
         ScanConvert_BilinealFrame(self.dset.frame_ny, self.dset.frame_nx, self.dset.frames_val, self.filt_frame, compounded_image, self.dset.ix_test, self.dset.w_test)
 
+        self.compounded_bscan = self.filt_frame
         self.parent.img_filtered.setImage(self.filt_frame)
         self.parent.subbands_string=self.subbands_string
         self.parent.subbands_label.setText('Subbandas de frecuencia usadas: ' + self.subbands_string)
@@ -1272,6 +1473,239 @@ class MultiAcquisitionWindow(QtWidgets.QDialog):
     #     self.img_list[n_acquisition].setImage[new_frame]
 
 
+class SpatialWindow(QtWidgets.QDialog):
+    def __init__(self, parent):
+        super().__init__()
+        self.parent=parent
+        # Configurar la ventana de adquisiciones múltiples
+        self.setWindowTitle('Adquisicion múltiples disparos')
+        self.setGeometry(100, 100, 800, 600)
+
+        # Crear un botón para agregar adquisiciones
+        self.add_acquisition_button = QtGui.QPushButton('Agregar Adquisición')
+        self.add_acquisition_button.clicked.connect(self.add_acquisition)
+        self.add_acquisition_button.setEnabled(False)
+        # Crear un botón para agregar adquisiciones
+        self.calculate_result_button = QtGui.QPushButton('Resultados')
+        self.calculate_result_button.clicked.connect(self.calculate_result)
+        self.calculate_result_button.setEnabled(False)
+
+        self.spatial_config_dialog_button = QtGui.QPushButton('Configurar filt. espaciales')
+        self.spatial_config_dialog_button.clicked.connect(self.open_config_dialog)
+        # Conecta la señal rejected (evento de cierre) al método close_and_delete
+        #self.rejected.connect(self.close_and_delete)
+
+
+
+        # Create a vertical layout for main window
+        main_layout = QtGui.QVBoxLayout()
+
+        # Create a horizontal layout for buttons
+        button_layout = QtGui.QHBoxLayout()
+        button_layout.addWidget(self.add_acquisition_button)
+        button_layout.addWidget(self.calculate_result_button)
+        button_layout.addWidget(self.spatial_config_dialog_button)
+
+        # Create a QWidget to hold the horizontal button layout
+        self.button_widget = QtGui.QWidget()
+        self.button_widget.setLayout(button_layout)
+
+        # Estructura de la multiples adq
+
+        self.acquisitions_layout = QtGui.QGridLayout()
+        # Create a QWidget to hold the horizontal button layout
+        self.acq_widget = QtGui.QWidget()
+        self.acq_widget.setLayout(self.acquisitions_layout)
+
+
+
+        # adding widget to main layout
+
+        main_layout.addWidget(self.button_widget)
+        main_layout.addWidget(self.acq_widget)
+        self.setLayout(main_layout)
+
+        # Lista para almacenar las adquisiciones
+        self.acquisitions = []
+        self.img_list = []
+        self.elem_list=[]
+
+
+
+        # valores filtro por defecto
+        self.n_acquisitions = 0
+        self.n_steps=5
+        self.aperture = 48
+        self.n_elements = 64
+        self.last_el = 16
+        self.first_el = 1
+        self.pitch=0.34
+        self.deltaMax = 15*0.34  # valor en mm
+        # self.c_x=self.deltaMax/2
+
+        # Create an instance of SpatialCompoundingUI
+        self.spatial_config_dialog = SpatialCompoundingUI()
+
+        self.setModal(False)  # permite poder usar la main window, hay que ponerlo antes de mostrar
+        self.show()
+
+
+
+
+    def close_and_delete(self):
+        # Realiza cualquier limpieza necesaria antes de cerrar
+        self.deleteLater()
+    def add_acquisition(self):
+
+
+        #Cargamos una adquisición
+        video_file, _ = QtGui.QFileDialog.getOpenFileName(self, 'Open Video', '', 'Video Files (*.BIN)')
+        if video_file:
+            # Leo el archivo y genero un objeto 'BinFile' que contiene los datos crudos tal cual se leen del archivo
+            bfile = BinFile(video_file)
+            # A partir del objeto 'BinFile' genero un objeto 'Dataset' que ya tiene los datos en formato 'cubo de datos'
+            # y contiene las matrices de coordenadas de los píxeles para poder pintar
+            self.dset = Dataset(bfile, resample=0, med_kernel=0, avg_kernel=0)
+            elem_num=int(self.dset.filename.split('.')[0].split('/')[-1])
+
+            fs = 40e6  # Frecuencia de muestreo en Hz
+            # Diseñar el filtro paso banda
+
+            b = signal.firwin(128, [1e6, 4e6], pass_zero='bandpass', fs=fs, scale=True)
+            a = 1
+            # Filtrar la matriz cruda B-scan con el filtro paso banda
+            filtered_b_scan = signal.filtfilt(b, a, self.dset.bscan[:, :, 0], axis=0)
+            envolvente = signal.hilbert(filtered_b_scan, axis=0)
+            envolvente = 20 * np.log10(np.abs(envolvente) / 3276.7)  # TAMAÑO INT16 pasamos a dB
+            envolvente[envolvente < -self.dset.dB_range] = -self.dset.dB_range
+            #simulo que solo tiene una imagen el resto no me interesa
+            self.dset.bscan[:,:,0] = envolvente
+
+            self.dset.ScanConvert(raw=False)  # como bscan y raw son iguales trabajo con uno para filtrar y el otro pinto para comparar
+            #información necesario para aplicar scanConvert
+            infoConvert=[self.dset.dB_range,self.dset.frame_ny, self.dset.frame_nx, self.dset.frames_val, self.dset.ix_test, self.dset.w_test]
+
+            #creo widget nuevo
+            acq_filt_widget = acq_Widget(infoConvert, self.dset.bscan[:,:,0], self.dset.frames[:,:,0], self.n_acquisitions, self)
+
+
+
+            if self.n_acquisitions<3:
+                # acq_widget=QtGui.QWidget()
+                # acq_widget.setLayout(acq_layout)
+                self.acquisitions_layout.addWidget(acq_filt_widget,0,  self.n_acquisitions)
+            elif self.n_acquisitions<6:
+                # acq_widget = QtGui.QWidget()
+                # acq_widget.setLayout(acq_layout)
+                self.acquisitions_layout.addWidget(acq_filt_widget, 1, self.n_acquisitions-3)
+
+            elif self.n_acquisitions < 9:
+                # acq_widget = QtGui.QWidget()
+                # acq_widget.setLayout(acq_layout)
+                self.acquisitions_layout.addWidget(acq_filt_widget, 2, self.n_acquisitions - 6)
+
+
+            # Agregar la adquisición a la lista
+            if self.n_acquisitions == 0:
+                self.acquisitions=np.expand_dims(self.dset.frames[:,:,0], axis=2)
+                self.img_list.append(acq_filt_widget)
+                self.elem_list.append(elem_num)
+            else:
+                frame=np.expand_dims(self.dset.frames[:,:,0], axis=2)
+                self.acquisitions=np.append(self.acquisitions,frame, axis=2)
+                self.img_list.append(acq_filt_widget)
+                self.elem_list.append(elem_num)
+            self.n_acquisitions+=1
+            # Habilitar el botón de cálculo cuando al menos haya una adquisición
+
+            if self.n_acquisitions >= self.n_steps:
+                self.add_acquisition_button.setEnabled(False)
+                self.calculate_result_button.setEnabled(True)
+            del bfile
+
+    def calculate_result(self):
+
+        #SPATIAL COMP
+        #final_frame=np.zeros((self.dset.frames.shape[0],self.dset.frames.shape[1]))
+        print(self.dset.px2mm)
+        frame_result=np.zeros((self.dset.frames.shape[0],self.dset.frames.shape[1]+np.ceil(self.deltaMax/self.dset.px2mm).astype(int)))#* (-self.dset.dB_range.astype('h')) Añado uno para tener en cuenta el pixel de los dos lados
+        # se calcula nuevo centro de imagen en px
+        c_1 = int(self.dset.cx)#np.ceil(frame_result.shape[1]/ 2).astype(int)
+        c_x=c_1+np.round((self.deltaMax/2)/self.dset.px2mm).astype(int)
+        frame_result_prom = np.zeros_like(frame_result) #matriz donde guanto los cuantas veces se has pintado los pixeles para calcular promedio
+        frame_result_val = np.zeros((self.dset.frames.shape[0],self.dset.frames.shape[1]+np.ceil(self.deltaMax/self.dset.px2mm).astype(int)), dtype=bool)
+        frame_result_val[:,c_x-int(self.dset.cx):c_x+int(self.dset.cx)+1]=self.dset.frames_val
+
+
+
+        #num_samples, num_lines, n_acq = self.acquisitions.shape
+
+        # Inicializar la imagen compuesta
+        #compounded_image = np.zeros((num_samples, num_lines))
+
+        # Al hacer click este boton habilito la opcion para que se calcule el resultado y se muestre en la app principal
+        for i in range(self.n_acquisitions):
+            frame= self.acquisitions[:,:,i]
+            elem=self.elem_list[i]
+            # calculo el centro de la imagen a sumar en pixeles
+            c_im= np.ceil(c_1 + (elem-1)*self.pitch/self.dset.px2mm).astype(int)#np.ceil(c_x - (((self.last_el-self.first_el)/2)-elem)*self.pitch/self.dset.px2mm).astype(int)
+            frame_result[:, c_im - int(self.dset.cx): c_im + int(self.dset.cx)+1]=(frame_result[:, c_im - int(self.dset.cx): c_im + int(self.dset.cx)+1]+(frame+self.dset.dB_range))#*frame_result_val
+            frame_result=frame_result*frame_result_val
+
+            frame_result_prom[:, c_im - int(self.dset.cx): c_im + int(self.dset.cx)+1]+=np.ones_like(frame)*self.dset.frames_val
+            frame_result_prom = frame_result_prom * frame_result_val
+
+
+        # Normalizar la imagen compuesta
+
+        frame_result = np.divide(frame_result, frame_result_prom, out=np.zeros_like(frame_result), where=frame_result_prom!=0)
+        frame_result = frame_result-self.dset.dB_range
+        frame_result[frame_result < -self.dset.dB_range] = -self.dset.dB_range
+
+        self.compounded_image=frame_result
+        # self.filt_frame = np.ones((self.dset.frame_ny, self.dset.frame_nx), dtype='h') * (-self.dset.dB_range.astype('h')) #frame compuesto
+        # ScanConvert_BilinealFrame(self.dset.frame_ny, self.dset.frame_nx, self.dset.frames_val, self.filt_frame, compounded_image, self.dset.ix_test, self.dset.w_test)
+
+        self.parent.img_filtered.setImage(frame_result)
+        # self.parent.subbands_string=self.subbands_string
+        # self.parent.subbands_label.setText('Subbandas de frecuencia usadas: ' + self.subbands_string)
+
+
+
+
+
+    def open_config_dialog(self):
+
+        # Load the configuration values before showing the dialog
+        self.spatial_config_dialog.n_step_spinBox.setValue(self.n_steps)
+        self.spatial_config_dialog.aperture_spinBox.setValue(self.aperture)
+        self.spatial_config_dialog.n_elements_spinBox.setValue(self.n_elements)
+
+        if self.spatial_config_dialog.exec_() == QtWidgets.QDialog.Accepted:
+            # Apply the settings from the dialog
+            self.n_steps = int(self.spatial_config_dialog.n_step_spinBox.value())
+            self.aperture = self.spatial_config_dialog.aperture_spinBox.value()
+            self.n_elements = self.spatial_config_dialog.n_elements_spinBox.value()
+            self.pitch = self.spatial_config_dialog.pitch.value()
+            self.last_el = self.spatial_config_dialog.last_spinbox.value()
+            self.first_el = self.spatial_config_dialog.first_spinbox.value()
+            self.deltaMax = (self.last_el -self.first_el) * self.pitch  # valor en mm
+
+
+            self.add_acquisition_button.setEnabled(True)
+
+    # def changeValue(self, n_acquisition):
+    #     #Aqui en funcion del slider que se active se modifica el bscan que corresponda y se actualiza la imagen
+    #     value=self.slider.value()
+    #     new_bscan=self.acquisitions[n_acquisition]*value
+    #     #Actualizamos frame
+    #     new_frame = np.ones((self.dset.frame_ny, self.dset.frame_nx), dtype='h') * (
+    #         -self.dset.dB_range.astype('h'))  # frame compuesto
+    #     ScanConvert_BilinealFrame(self.dset.frame_ny, self.dset.frame_nx, self.dset.frames_val, new_frame,new_bscan, self.dset.ix_test, self.dset.w_test)
+    #
+    #     self.img_list[n_acquisition].setImage[new_frame]
+
+
 class acq_Widget(QtGui.QWidget):
     def __init__(self, infoConvert, bscan, image, index, parent):
         super().__init__()
@@ -1293,6 +1727,13 @@ class acq_Widget(QtGui.QWidget):
         self.img_acq.setImage(self.frame)
         self.acq_view.addItem(self.img_acq)
         self.acq_view.invertY()
+        # Crear una etiqueta emergente para mostrar las coordenadas y el valor del píxel
+
+        self.tooltip_label = QtGui.QLabel(self)
+        self.tooltip_label.setStyleSheet("QLabel { background-color : white; color : black; }")
+        self.tooltip_label.setWindowFlags(QtCore.Qt.ToolTip)
+        self.tooltip_label.setMargin(5)
+
         # Añado slider
         self.slider = QtWidgets.QSlider(QtCore.Qt.Vertical)
         self.slider.setMinimum(100)  # Valor mínimo: 1.0
@@ -1307,6 +1748,27 @@ class acq_Widget(QtGui.QWidget):
         acq_layout.addWidget(self.acq_view)
 
         self.setLayout(acq_layout)
+        self.mousePressEvent = self.mouse_click
+
+    def mouse_click(self, event):
+        pos = event.pos()
+        # Convertir la posición de la escena a coordenadas de la imagen
+        pos_img = self.img_acq.mapFromScene(pos)
+        x, y = int(pos_img.x()), int(pos_img.y())
+
+        # Obtener el valor del píxel en las coordenadas del clic
+        pixel_value = self.img_acq.image[y, x]
+        coordinates = f"Coordenadas: ({x}, {y})"
+        pixel_info = f"Valor del píxel: {pixel_value}"
+
+        # Mostrar el widget emergente cerca del cursor
+        tooltip_text = f"{coordinates}\n{pixel_info}"
+        self.tooltip_label.setText(tooltip_text)
+        self.tooltip_label.move(QtGui.QApplication.desktop().cursor().pos() + QtCore.QPoint(10, 10))
+        self.tooltip_label.show()
+
+        # Ocultar el widget emergente después de un tiempo
+        QtCore.QTimer.singleShot(2000, self.tooltip_label.hide)
 
     def update_image_saturation(self):
         # Obtener el valor del slider y calcular la saturación

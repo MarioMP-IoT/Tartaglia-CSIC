@@ -316,7 +316,7 @@ class Dataset:
         self.avg_kernel = avg_kernel # Tamaño del filtro de media móvil (0 desactiva)
 
         self.nlin   = binFile.n_ascan[0]
-        self.nimg   = 1#binFile.trigger_lines_number
+        self.nimg   = binFile.trigger_lines_number
         self.x_ini  = binFile.x_entry_points[0][:]
         self.z_ini  = binFile.z_entry_points[0][:]
         self.r      = np.arange(binFile.start_range_mm, binFile.end_range_mm, (binFile.end_range_mm - binFile.start_range_mm) / self.nr)
@@ -449,6 +449,8 @@ class Dataset:
 
     def saveResults(self, results):
         self.results=results
+
+
 @jit(nopython=True, parallel=False, cache=True)
 def ScanConvert_BilinealFrame(frame_ny, frame_nx, val, frame, bscan, ix, w):
     """Bilineal interpolator."""
